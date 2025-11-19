@@ -16,7 +16,7 @@ export const register = async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Email already registered' });
 
   const salt = await genSalt(10);
-  const hashedPassword = await hash('yourpassword', salt);
+  const hashedPassword = await hash(data.password, salt);
   const referenceCode = `REF-${nanoid(8).toUpperCase()}`;
 
   const created = await prisma.user.create({
@@ -24,9 +24,9 @@ export const register = async (req: Request, res: Response) => {
       email: data.email,
       password: hashedPassword,
       name: data.name,
-      Role: data.role || 'CUSTOMER',
       referenceCode,
       referredById: null,
+      ...(data.role ? { role: data.role } : {}),
     },
   });
 

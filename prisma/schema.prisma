@@ -23,8 +23,10 @@ model User {
   updatedAt             DateTime @updatedAt
   profilePhoto          String?
   pointTransactions     PointTransaction[]
-  coupons               Coupon[]
+  ownedCoupons         Coupon[] @relation("CouponOwner")
+  coupons              Coupon[] @relation("CouponUser")
   events                Event[] @relation("OwnerEvents")
+  tickets               Ticket[]
   transactions          Transaction[]
 }
 
@@ -43,12 +45,13 @@ model Coupon {
   code                  String @unique
   discount              Int
   ownerId               String?
-  owner                 User? @relation(fields: [ownerId], references: [id])
+  owner                 User? @relation("CouponOwner", fields: [ownerId], references: [id])
   userId                String?
-  user                  User? @relation(fields: [userId], references: [id])
+  user                  User? @relation("CouponUser", fields: [userId], references: [id])
   expiresAt             DateTime
   createdAt             DateTime @default(now())
   used                  Boolean @default(false)
+  transactions          Transaction[] @relation("CouponTransactions")
 }
 
 model Event {
@@ -65,6 +68,7 @@ model Event {
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
   tickets               Ticket[]
+  transactions          Transaction[] @relation("EventTransactions")
 }
 
 model Ticket {
@@ -83,12 +87,12 @@ model Transaction {
   user                  User @relation(fields: [userId], references: [id])
   userId                String
   eventId               String
-  event                 Event @relation(fields: [eventId], references: [id])
+  event                 Event @relation("EventTransactions", fields: [eventId], references: [id])
   amount                Int
   status                TxStatus @default(PENDING)
   proofUrl              String?
   couponId              String?
-  coupon                Coupon? @relation(fields: [couponId], references: [id])
+  coupon                Coupon? @relation("CouponTransactions", fields: [couponId], references: [id])
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 }
