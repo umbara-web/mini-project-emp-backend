@@ -1,55 +1,86 @@
 import { Request, Response, NextFunction } from 'express';
-import { verify } from 'jsonwebtoken';
+import jwt from 'jsonwebtoken';
+import prisma from '../config/prismaClient';
+import dotenv from 'dotenv';
 
-import { createCustomError } from '../utils/customError';
-import { SECRET_KEY } from '../config/env.config';
+dotenv.config();
 
-export interface Token {
-  email: string;
-  name: string;
-  role: string;
+// Define a type for JWT payload
+interface JwtPayload {
+  id: string;
+  role: 'CUSTOMER' | 'ORGANIZER';
 }
 
-declare module 'express-serve-static-core' {
-  interface Request {
-    user?: Token;
-  }
-}
-
-export function authMiddleware(
+/**
+ * AUTHENTICATE MIDDLEWARE
+ * Verifies JWT token and attaches user to req.user
+ */
+export const authenticate = async (
   req: Request,
   res: Response,
   next: NextFunction
-) {
+) => {
   try {
     const authHeader = req.headers.authorization;
-
-    if (!authHeader || !authHeader.startsWith('Bearer '))
-      throw createCustomError(401, 'Unauthorized');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
 
     const token = authHeader.split(' ')[1];
-    const decoded = verify(token, SECRET_KEY) as Token;
-    req.user = decoded;
 
-    next();
-  } catch (err) {
-    next(err);
-  }
-}
+    const decoded = jwt.verify(
+      token,
+      process.env.JWT_SECRET as string
+    ) as JwtPayload;
 
-export function roleGuard(allowedRoles: string[]) {
-  return (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const user = req.user;
-
-      if (!user) throw createCustomError(401, 'invalid token');
-
-      if (!allowedRoles.includes(user?.role))
-        throw createCustomError(401, 'Insufficient permissions');
-
-      next();
-    } catch (err) {
-      next(err);
+    const user = await prisma.user.findUnique({ where: { id: decoded.id } });
+    if (!user) {
+      return res
+        .status(401)
+        .json({ success: false, message: 'Invalid token user' });
     }
-  };
-}
+
+    // Attach full user object to request (matches Request.user type)
+    req.user = user;
+
+    return next();
+  } catch (err) {
+    return res
+      .status(401)
+      .json({ success: false, message: 'Invalid or expired token' });
+  }
+};
+
+/**
+ * AUTHORIZE ORGANIZER
+ * Allows only organizers to continue
+ */
+export const authorizeOrganizer = (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  if (!req.user || req.user.role !== 'ORGANIZER') {
+    return res
+      .status(403)
+      .json({ success: false, message: 'Access denied: organizer only' });
+  }
+  return next();
+};
+
+/**
+ * AUTHORIZE CUSTOMER
+ * Allows only customers to continue
+ */
+export const authorizeCustomer = (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  if (!req.user || req.user.role !== 'CUSTOMER') {
+    return res
+      .status(403)
+      .json({ success: false, message: 'Access denied: customer only' });
+  }
+  return next();
+};
